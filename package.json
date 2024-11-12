@@ -10,7 +10,9 @@
 		"body-parser": "^1.20.3",
 		"cors": "^2.8.5",
 		"dotenv": "^8.2.0",
-		"express": "^4.16.4"
+		"express": "^4.16.4",
+		"mongodb": "^6.10.0",
+		"mongoose": "^8.8.1"
 	},
 	"repository": {
 		"url": "git+https://github.com/freeCodeCamp/boilerplate-project-exercisetracker.git"
