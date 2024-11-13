@@ -12,18 +12,17 @@ app.get('/', (req, res) => {
 });
 
 class Db {
-  static uid = 0
-
   constructor() {
+    return this.init()
   }
 
-  async initialize() {
+  async init() {
     const uri = "mongodb+srv://dracocosmos:" + process.env.DATABASEP + "@freecodecamp-exercise.lh9go.mongodb.net/?retryWrites=true&w=majority&appName=freecodecamp-exercise";
 
-    await mongoose.connect(uri)
+    this.connection = await mongoose.connect(uri)
 
     const exerciseSchema = new mongoose.Schema({
-      username: {
+      userId: {
         type: String,
         required: true
       },
@@ -61,10 +60,12 @@ class Db {
       exercises: [exerciseSchema]
     })
     this.User = mongoose.model('User', userSchema)
+
+    // this is important:
+    return this
   }
 
   addUser(userN) {
-
     const user = new this.User({ username: userN })
 
     user.save()
@@ -72,23 +73,45 @@ class Db {
     return { _id: user._id, username: user.username }
   }
 
+  getUsers() {
+    // return a list of users
+
+
+    return
+  }
+
   addExercise(id, description, duration, date) {
+    const exerciseObj = {
+      userId: id,
+      description: description,
+      duration: duration,
+      date: date
+    }
+
+    new this.Exercise.save(exerciseObj)
+
+    return exerciseObj
   }
 }
 
-const db = new Db
-db.initialize()
-  .then(err => {
-    mongoose.Model.remove
-    db['User'].remove()
-  })
+let db
+const startDb = async () => {
+  db = await new Db()
 
-// drop old data
-// mongoose.db.Exercise.remove({}, err =>
-//   console.log(err)
-// )
+  // for deleting previous testing entries:
+  // if (true) {
+  if (false) {
+    await db.User.deleteMany({}).exec()
+    await db.Exercise.deleteMany({}).exec()
 
-// console.log(mongoose.connection.collections['exercises'])
+    const users = await db.User.find()
+    const exercises = await db.Exercise.find()
+    console.log(users)
+    console.log(exercises)
+  }
+  console.log('database created')
+}
+startDb()
 
 const urlParser = bodyParser.urlencoded({ 'extended': true })
 app.post("/api/users", urlParser, (req, res) => {
