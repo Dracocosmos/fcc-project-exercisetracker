@@ -7,7 +7,7 @@ const mongoose = require('mongoose')
 
 app.use(cors())
 app.use(express.static('public'))
-app.get('/', (req, res) => {
+app.get('/', (_req, res) => {
   res.sendFile(__dirname + '/views/index.html')
 });
 
@@ -25,12 +25,6 @@ class Db {
       userId: {
         type: String,
         required: true
-      },
-      exerciseId: {
-        type: mongoose.ObjectId,
-        index: true,
-        required: true,
-        auto: true,
       },
       description: {
         type: String,
@@ -52,11 +46,6 @@ class Db {
         type: String,
         required: true
       },
-      _id: {
-        type: mongoose.ObjectId,
-        required: true,
-        auto: true,
-      },
       exercises: [exerciseSchema]
     })
     this.User = mongoose.model('User', userSchema)
@@ -73,22 +62,60 @@ class Db {
     return { _id: user._id, username: user.username }
   }
 
-  getUsers() {
+  async getUsers() {
     // return a list of users
 
+    const users = await this.User.find({}).exec()
+    const rVal = users.map((user, _ind) => {
+      const id = user._id.toString()
+      return { username: user.username, _id: id }
+    })
 
-    return
+    return rVal
   }
 
-  addExercise(id, description, duration, date) {
+  async addExercise(userId, description, duration, date) {
+
+    // if date is not provided, get current date
+    date = date
+      ? new Date(date)
+      : new Date
+
     const exerciseObj = {
-      userId: id,
+      userId: userId,
       description: description,
       duration: duration,
       date: date
     }
 
-    new this.Exercise.save(exerciseObj)
+    // check if user exists
+    let user
+    try {
+      user = await this.User.findById(userId)
+    } catch (error) {
+      return Error('no user found', error)
+    }
+
+    // create record in memory
+    try {
+      // make exercise
+      const exercise = new this.Exercise({
+        userId: userId,
+        description: description,
+        duration: duration,
+        date: date
+      })
+
+      // append it to list
+      user.exercises.push(exercise)
+    } catch (error) {
+      return Error('failed creating record', error)
+    }
+    console.log(user)
+
+    // new this.Exercise.save(exerciseObj)
+
+    // make a new record, save it to the list of the correct user
 
     return exerciseObj
   }
@@ -116,20 +143,27 @@ startDb()
 const urlParser = bodyParser.urlencoded({ 'extended': true })
 app.post("/api/users", urlParser, (req, res) => {
 
-  console.log(req.body)
+  const newUser = db.addUser(req.body.username)
+
   res.json(
     {
-      username: req.body.username,
-      _id: db.addUser(req.body.username)._id
+      username: newUser.username,
+      _id: newUser._id.toString()
     }
   )
 })
 
-app.post("/api/users/:_id/exercises", urlParser, (req, res) => {
+app.get("/api/users", async (req, res) => {
+  res.json(
+    await db.getUsers()
+  )
+})
+
+app.post("/api/users/:_id/exercises", urlParser, async (req, res) => {
   const r = req.body
 
   console.log(req.body)
-  console.log(db.addExercise(r[':_id'], r.description, r.duration, r.date))
+  console.log('added: ' + await db.addExercise(r[':_id'], r.description, r.duration, r.date))
 
   res.json(
     {
