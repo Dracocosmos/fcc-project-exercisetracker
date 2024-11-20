@@ -24,7 +24,7 @@ class Db {
     const exerciseSchema = new mongoose.Schema({
       userId: {
         type: String,
-        required: true
+        required: true,
       },
       description: {
         type: String,
@@ -50,6 +50,7 @@ class Db {
     })
     this.User = mongoose.model('User', userSchema)
 
+    console.log('database linked')
     // this is important:
     return this
   }
@@ -74,6 +75,50 @@ class Db {
     return rVal
   }
 
+  async getLog(userId, dateLow, dateHigh, limit) {
+    const getLowDate = (date) => {
+      date = date
+        ? new Date(date)
+        : new Date(0)
+      return date
+    }
+    const getHighDate = (date) => {
+      date = date
+        ? new Date(date)
+        : new Date
+      return date
+    }
+
+    let user = await this.User
+      .findById(userId)
+
+    if (!user) {
+      console.error('no user found')
+      return Error('no user found')
+    }
+
+    user.exercises = user.exercises.filter((e) => {
+      return e.date >= getLowDate(dateLow)
+        && e.date <= getHighDate(dateHigh)
+    })
+
+    console.log(user.exercises)
+    return {
+      username: user.username,
+      count: user.exercises.length,
+      _id: user._id,
+      log:
+        user.exercises.map((exercise) => {
+          return {
+            description: exercise.description,
+            duration: exercise.duration,
+            date: exercise.date.toDateString()
+          }
+        })
+
+    }
+  }
+
   async addExercise(userId, description, duration, date) {
 
     // if date is not provided, get current date
@@ -81,24 +126,20 @@ class Db {
       ? new Date(date)
       : new Date
 
-    const exerciseObj = {
-      userId: userId,
-      description: description,
-      duration: duration,
-      date: date
-    }
+    duration = +duration
 
     // check if user exists
     let user
     try {
       user = await this.User.findById(userId)
     } catch (error) {
-      return Error('no user found', error)
+      console.error(error)
+      return Error('no user found')
     }
 
-    // create record in memory
+    // make a new record, save it to the list of the correct user
     try {
-      // make exercise
+      // create record in memory
       const exercise = new this.Exercise({
         userId: userId,
         description: description,
@@ -108,14 +149,20 @@ class Db {
 
       // append it to list
       user.exercises.push(exercise)
+
+      user.save()
     } catch (error) {
-      return Error('failed creating record', error)
+      console.error(error)
+      return Error('failed creating record')
     }
-    console.log(user)
 
-    // new this.Exercise.save(exerciseObj)
-
-    // make a new record, save it to the list of the correct user
+    const exerciseObj = {
+      _id: userId,
+      description: description,
+      duration: duration,
+      date: date.toDateString(),
+      username: user.username
+    }
 
     return exerciseObj
   }
@@ -136,41 +183,49 @@ const startDb = async () => {
     console.log(users)
     console.log(exercises)
   }
-  console.log('database created')
 }
-startDb()
+startDb().then((res) => {
+  const urlParser = bodyParser.urlencoded({ 'extended': true })
+  app.post("/api/users", urlParser, (req, res) => {
 
-const urlParser = bodyParser.urlencoded({ 'extended': true })
-app.post("/api/users", urlParser, (req, res) => {
+    const newUser = db.addUser(req.body.username)
 
-  const newUser = db.addUser(req.body.username)
+    res.json(
+      {
+        username: newUser.username,
+        _id: newUser._id.toString()
+      }
+    )
+  })
 
-  res.json(
-    {
-      username: newUser.username,
-      _id: newUser._id.toString()
-    }
-  )
-})
+  app.get("/api/users", async (req, res) => {
+    res.json(
+      await db.getUsers()
+    )
+  })
 
-app.get("/api/users", async (req, res) => {
-  res.json(
-    await db.getUsers()
-  )
-})
+  app.post("/api/users/:_id/exercises", urlParser, async (req, res) => {
+    const r = req.body
 
-app.post("/api/users/:_id/exercises", urlParser, async (req, res) => {
-  const r = req.body
+    const exercise = await db.addExercise(
+      req.params._id,
+      r.description,
+      r.duration,
+      r.date
+    )
 
-  console.log(req.body)
-  console.log('added: ' + await db.addExercise(r[':_id'], r.description, r.duration, r.date))
+    res.json(
+      exercise
+    )
+  })
 
-  res.json(
-    {
-    }
-  )
-})
+  app.get("/api/users/:_id/logs", urlParser, async (req, res) => {
+    res.json(
+      await db.getLog(req.params._id)
+    )
+  })
 
-const listener = app.listen(process.env.PORT || 3000, () => {
-  console.log('Your app is listening on port ' + listener.address().port)
+  const listener = app.listen(process.env.PORT || 3000, () => {
+    console.log('Your app is listening on port ' + listener.address().port)
+  })
 })
