@@ -101,9 +101,11 @@ class Db {
       return e.date >= getLowDate(dateLow)
         && e.date <= getHighDate(dateHigh)
     })
+    user.exercises = limit
+      ? user.exercises.slice(0, limit)
+      : user.exercises
 
-    console.log(user.exercises)
-    return {
+    const rObj = {
       username: user.username,
       count: user.exercises.length,
       _id: user._id,
@@ -115,8 +117,8 @@ class Db {
             date: exercise.date.toDateString()
           }
         })
-
     }
+    return rObj
   }
 
   async addExercise(userId, description, duration, date) {
@@ -128,32 +130,35 @@ class Db {
 
     duration = +duration
 
-    // check if user exists
-    let user
-    try {
-      user = await this.User.findById(userId)
-    } catch (error) {
-      console.error(error)
-      return Error('no user found')
-    }
-
     // make a new record, save it to the list of the correct user
+    let exercise
     try {
       // create record in memory
-      const exercise = new this.Exercise({
+      exercise = new this.Exercise({
         userId: userId,
         description: description,
         duration: duration,
         date: date
       })
-
-      // append it to list
-      user.exercises.push(exercise)
-
-      user.save()
     } catch (error) {
-      console.error(error)
+      console.error('failed creating record', error)
       return Error('failed creating record')
+    }
+
+    // push to list
+    let user
+    try {
+      user = await this.User.findOneAndUpdate(
+        { _id: userId },
+        { $push: { exercises: exercise } }
+      );
+    } catch (error) {
+      console.error('failed updating exercise list', error)
+      return Error('failed updating exercise list')
+    }
+    if (!user) {
+      console.error('no user found')
+      return Error('no user found')
     }
 
     const exerciseObj = {
@@ -180,8 +185,9 @@ const startDb = async () => {
 
     const users = await db.User.find()
     const exercises = await db.Exercise.find()
-    console.log(users)
-    console.log(exercises)
+    console.log('users:', users)
+    console.log('exercises:', exercises)
+    console.log('database cleared if lists above empty')
   }
 }
 startDb().then((res) => {
@@ -219,11 +225,14 @@ startDb().then((res) => {
     )
   })
 
-  app.get("/api/users/:_id/logs", urlParser, async (req, res) => {
-    res.json(
-      await db.getLog(req.params._id)
-    )
-  })
+  app.get("/api/users/:_id/logs",
+    urlParser,
+    async (req, res) => {
+      const q = req.query
+      res.json(
+        await db.getLog(req.params._id, q.from, q.to, q.limit)
+      )
+    })
 
   const listener = app.listen(process.env.PORT || 3000, () => {
     console.log('Your app is listening on port ' + listener.address().port)
